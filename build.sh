@@ -1,3 +1,3 @@
 #!/bin/sh
 
-wasm-pack build --target web --out-dir static/pkg "$@"
+wasm-pack build --target no-modules --out-dir static/pkg "$@"
