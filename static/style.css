@@ -15,6 +15,30 @@ body {
     padding: 0;
 }
 
+html {
+    font: 16px 'Helvetica Neue', Arial, sans-serif;
+}
+
+body {
+    padding: 8px;
+}
+
+.form > .row {
+    margin-bottom: 8px;
+}
+
+.form > .row > label {
+    display: inline-block;
+    width: 150px;
+    margin-right: 8px;
+
+    text-align: right;
+}
+
+.form > button {
+    margin-left: 158px;
+}
+
 canvas {
     display: block;
 }

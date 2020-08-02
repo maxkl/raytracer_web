@@ -132,63 +132,86 @@ class RenderWorker extends EventEmitter {
     }
 }
 
-(async function () {
-    const cpuCount = window.navigator.hardwareConcurrency || 1;
-    const workers = await Promise.all(range(cpuCount).map(i => RenderWorker.start()));
+class Renderer {
+    constructor(canvas) {
+        this._canvas = canvas;
+        this._ctx = this._canvas.getContext('2d');
 
-    for (const worker of workers) {
-        worker.init();
+        this._workers = [];
+
+        this._imageData = null;
+        this._pixels = null;
+
+        this._initialized = false;
     }
 
-    console.info('Started ' + cpuCount + ' workers');
+    async init() {
+        if (this._initialized) {
+            return;
+        }
 
-    const chunkSize = 30;
-    const width = chunkSize * 16;
-    const height = chunkSize * 9;
+        const cpuCount = window.navigator.hardwareConcurrency || 1;
+        const workers = await Promise.all(range(cpuCount).map(_ => RenderWorker.start()));
 
-    const canvas = document.querySelector('#canvas');
-    const ctx = canvas.getContext('2d');
+        for (const worker of workers) {
+            worker.init();
+        }
 
-    canvas.width = width;
-    canvas.height = height;
+        console.info('Started ' + cpuCount + ' workers');
 
-    let imageData = ctx.getImageData(0, 0, width, height);
-    let pixels = imageData.data;
+        this._workers = workers;
 
-    function clearImage() {
-        ctx.clearRect(0, 0, width, height);
-        imageData = ctx.getImageData(0, 0, width, height);
-        pixels = imageData.data;
+        this._initialized = true;
     }
 
-    function updateImage(chunk, data) {
+    _updatePixels() {
+        this._imageData = this._ctx.getImageData(0, 0, this._width, this._height);
+        this._pixels = this._imageData.data;
+    }
+
+    setSize(width, height) {
+        this._width = width;
+        this._height = height;
+
+        this._canvas.width = this._width;
+        this._canvas.height = this._height;
+
+        this._updatePixels();
+    }
+
+    _clearImage() {
+        this._ctx.clearRect(0, 0, this._width, this._height);
+        this._updatePixels();
+    }
+
+    _updateImage(chunk, data) {
         for (let localY = 0; localY < chunk.h; localY++) {
             for (let localX = 0; localX < chunk.w; localX++) {
                 const index = ((localY * chunk.w) + localX) * 3;
 
                 const x = chunk.x + localX;
                 const y = chunk.y + localY;
-                const pixelIndex = ((y * width) + x) * 4;
+                const pixelIndex = ((y * this._width) + x) * 4;
 
-                pixels[pixelIndex + 0] = data[index + 0];
-                pixels[pixelIndex + 1] = data[index + 1];
-                pixels[pixelIndex + 2] = data[index + 2];
-                pixels[pixelIndex + 3] = 255;
+                this._pixels[pixelIndex] = data[index];
+                this._pixels[pixelIndex + 1] = data[index + 1];
+                this._pixels[pixelIndex + 2] = data[index + 2];
+                this._pixels[pixelIndex + 3] = 255;
             }
         }
 
-        ctx.putImageData(imageData, 0, 0);
+        this._ctx.putImageData(this._imageData, 0, 0);
     }
 
-    function run() {
+    async render(chunkSize) {
         const chunks = [];
-        for (let y = 0; y < height; y += chunkSize) {
-            for (let x = 0; x < width; x += chunkSize) {
+        for (let y = 0; y < this._height; y += chunkSize) {
+            for (let x = 0; x < this._width; x += chunkSize) {
                 chunks.push({
                     x: x,
                     y: y,
-                    w: chunkSize,
-                    h: chunkSize
+                    w: Math.min(this._width - x, chunkSize),
+                    h: Math.min(this._height - y, chunkSize)
                 });
             }
         }
@@ -201,12 +224,14 @@ class RenderWorker extends EventEmitter {
             return null;
         }
 
-        clearImage();
+        this._clearImage();
+
+        const self = this;
 
         function renderChunk(worker, chunk) {
             return worker.render(chunk.x, chunk.y, chunk.w, chunk.h)
                 .then(result => {
-                    updateImage(chunk, result);
+                    self._updateImage(chunk, result);
                     return render(worker);
                 });
         }
@@ -220,9 +245,52 @@ class RenderWorker extends EventEmitter {
             }
         }
 
-        Promise.all(workers.map(worker => render(worker)))
-            .then(_ => console.log('Render done'));
+        await Promise.all(this._workers.map(worker => render(worker)));
     }
+}
 
-    document.querySelector('#btn-run').addEventListener('click', evt => run());
-})().catch(err => console.error(err));
+const widthInput = document.querySelector('#input-width');
+const heightInput = document.querySelector('#input-height');
+const chunkSizeInput = document.querySelector('#input-chunk-size');
+const renderButton = document.querySelector('#btn-render');
+const statusText = document.querySelector('#status');
+const canvas = document.querySelector('#canvas');
+
+const renderer = new Renderer(canvas);
+
+function setStatus(status) {
+    statusText.textContent = status;
+}
+
+function parseInt2(s) {
+    const value = parseInt(s, 10);
+    if (isNaN(value) || !isFinite(value)) {
+        throw new Error('\'' + s + '\' is not a valid integer');
+    }
+    return value;
+}
+
+renderButton.addEventListener('click', _ => {
+    try {
+        const width = parseInt2(widthInput.value);
+        const height = parseInt2(heightInput.value);
+        const chunkSize = parseInt2(chunkSizeInput.value);
+
+        renderer.setSize(width, height);
+
+        setStatus('Rendering...');
+
+        const start = Date.now();
+
+        renderer.render(chunkSize)
+            .then(_ => setStatus('Rendered in ' + ((Date.now() - start) / 1000).toFixed(2) + ' seconds'));
+    } catch (e) {
+        setStatus(e);
+    }
+});
+
+renderer.init()
+    .then(_ => {
+        renderButton.disabled = false;
+    })
+    .catch(err => console.error(err));
