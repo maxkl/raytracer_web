@@ -40,7 +40,7 @@ body {
     white-space: pre;
 }
 
-.form > button {
+.form > .col-2 {
     margin-left: 158px;
 }
 

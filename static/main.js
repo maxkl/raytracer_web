@@ -171,6 +171,10 @@ class Renderer {
         this._initialized = true;
     }
 
+    getWorkerCount() {
+        return this._workers.length;
+    }
+
     _updatePixels() {
         this._imageData = this._ctx.getImageData(0, 0, this._width, this._height);
         this._pixels = this._imageData.data;
@@ -369,15 +373,30 @@ const DEFAULT_SCENE = `{
 const sceneInput = document.querySelector('#input-scene');
 const chunkSizeInput = document.querySelector('#input-chunk-size');
 const renderButton = document.querySelector('#btn-render');
-const statusText = document.querySelector('#status');
+const errorText = document.querySelector('#error');
+const status1Text = document.querySelector('#status1');
+const status2Text = document.querySelector('#status2');
 const canvas = document.querySelector('#canvas');
 
 sceneInput.textContent = DEFAULT_SCENE;
 
 const renderer = new Renderer(canvas);
 
-function setStatus(status) {
-    statusText.textContent = status;
+function setStatus1(status) {
+    status1Text.textContent = status;
+}
+
+function setStatus2(status) {
+    status2Text.textContent = status;
+}
+
+function setError(err) {
+    errorText.style.display = 'block';
+    errorText.textContent = err;
+}
+
+function hideError() {
+    errorText.style.display = 'none';
 }
 
 function parseInt2(s) {
@@ -389,23 +408,43 @@ function parseInt2(s) {
 }
 
 renderButton.addEventListener('click', _ => {
+    let scene;
+    let chunkSize;
+
     try {
-        const chunkSize = parseInt2(chunkSizeInput.value);
-
-        let start;
-
-        renderer.loadScene(sceneInput.textContent).then(size => {
-            renderer.setSize(size.width, size.height);
-
-            setStatus('Rendering...');
-
-            start = Date.now();
-
-            return renderer.render(chunkSize);
-        }).then(_ => setStatus('Rendered in ' + ((Date.now() - start) / 1000).toFixed(2) + ' seconds'));
+        scene = sceneInput.value;
+        JSON.parse(scene);
     } catch (e) {
-        setStatus(e);
+        setError('Invalid scene definition: ' + e);
+        return;
     }
+
+    try {
+        chunkSize = parseInt2(chunkSizeInput.value);
+    } catch (e) {
+        setError('Invalid chunk size: ' + e);
+        return;
+    }
+
+    hideError();
+
+    setStatus1('Using ' + renderer.getWorkerCount() + ' workers');
+
+    setStatus2('Loading scene...');
+
+    let start;
+
+    renderer.loadScene(scene).then(size => {
+        renderer.setSize(size.width, size.height);
+
+        window.location.hash = '#render-result';
+
+        setStatus2('Rendering...');
+
+        start = Date.now();
+
+        return renderer.render(chunkSize);
+    }).then(_ => setStatus2('Rendered in ' + ((Date.now() - start) / 1000).toFixed(2) + ' seconds'));
 });
 
 renderer.init()
