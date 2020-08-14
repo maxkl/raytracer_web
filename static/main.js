@@ -121,6 +121,13 @@ class RenderWorker extends EventEmitter {
         this._sendMessage('init');
     }
 
+    loadScene(scene) {
+        this._sendMessage('load scene', {
+            scene: scene,
+        });
+        return this.oncePromise('load scene done');
+    }
+
     render(x, y, w, h) {
         this._sendMessage('render', {
             x: x,
@@ -177,6 +184,11 @@ class Renderer {
         this._canvas.height = this._height;
 
         this._updatePixels();
+    }
+
+    async loadScene(scene) {
+        const sizes = await Promise.all(this._workers.map(worker => worker.loadScene(scene)));
+        return sizes[0];
     }
 
     _clearImage() {
@@ -249,12 +261,118 @@ class Renderer {
     }
 }
 
-const widthInput = document.querySelector('#input-width');
-const heightInput = document.querySelector('#input-height');
+const DEFAULT_SCENE = `{
+  "camera": {
+    "resolution": [800, 600],
+    "fov": 45,
+    "position": { "x": 3, "y": 5, "z": 8 },
+    "direction": { "x": -3, "y": -4, "z": -8 },
+    "up": { "x": 0, "y": 1, "z": 0 }
+  },
+  "aa_samples": 64,
+  "clear_color": { "r": 0.6, "g": 0.8, "b": 1 },
+  "materials": [
+    {
+      "color": { "Color": { "r": 1, "g": 1, "b": 1 } },
+      "albedo": 0.4,
+      "reflectivity": 0.2,
+      "transparency": 0,
+      "refractive_index": 1
+    },
+    {
+      "color": { "Color": { "r": 1, "g": 0, "b": 0 } },
+      "albedo": 0.4,
+      "reflectivity": 0.3,
+      "transparency": 0,
+      "refractive_index": 1
+    },
+    {
+      "color": { "Color": { "r": 0, "g": 1, "b": 0 } },
+      "albedo": 0.4,
+      "reflectivity": 0.3,
+      "transparency": 0,
+      "refractive_index": 1
+    },
+    {
+      "color": { "Color": { "r": 0, "g": 0, "b": 1 } },
+      "albedo": 0.4,
+      "reflectivity": 0.3,
+      "transparency": 0,
+      "refractive_index": 1
+    },
+    {
+      "color": { "Color": { "r": 1, "g": 1, "b": 1 } },
+      "albedo": 0.4,
+      "reflectivity": 0,
+      "transparency": 1,
+      "refractive_index": 1.5
+    }
+  ],
+  "objects": [
+    {
+      "material_index": 0,
+      "transform": {
+        "translation": { "x": 0, "y": 0, "z": 0 },
+        "rotation": { "x": 0, "y": 0, "z": 0 },
+        "scale": 1
+      },
+      "shape": { "Plane": {} }
+    },
+    {
+      "material_index": 1,
+      "transform": {
+        "translation": { "x": -4, "y": 2, "z": -2 },
+        "rotation": { "x": 0, "y": 0, "z": 0 },
+        "scale": 2
+      },
+      "shape": { "Sphere": {} }
+    },
+    {
+      "material_index": 2,
+      "transform": {
+        "translation": { "x": 0, "y": 1, "z": -5 },
+        "rotation": { "x": 0, "y": 0, "z": 0 },
+        "scale": 1
+      },
+      "shape": { "Sphere": {} }
+    },
+    {
+      "material_index": 3,
+      "transform": {
+        "translation": { "x": 3, "y": 0.5, "z": -1 },
+        "rotation": { "x": 0, "y": 0, "z": 0 },
+        "scale": 0.5
+      },
+      "shape": { "Sphere": {} }
+    },
+    {
+      "material_index": 4,
+      "transform": {
+        "translation": { "x": 0, "y": 1.5, "z": 0 },
+        "rotation": { "x": 0, "y": 0, "z": 0 },
+        "scale": 1.5
+      },
+      "shape": { "Sphere": {} }
+    }
+  ],
+  "ambient_light_color": { "r": 0.1, "g": 0.1, "b": 0.1 },
+  "lights": [
+    { "Directional": {
+        "direction": { "x": -2, "y": -8, "z": -1 },
+        "color": { "r": 1, "g": 1, "b": 0.9 },
+        "intensity": 10
+    }}
+  ],
+  "max_recursion_depth": 5
+}`;
+
+const sceneInput = document.querySelector('#input-scene');
 const chunkSizeInput = document.querySelector('#input-chunk-size');
 const renderButton = document.querySelector('#btn-render');
 const statusText = document.querySelector('#status');
 const canvas = document.querySelector('#canvas');
+
+sceneInput.textContent = DEFAULT_SCENE;
 
 const renderer = new Renderer(canvas);
 
@@ -272,18 +390,19 @@ function parseInt2(s) {
 
 renderButton.addEventListener('click', _ => {
     try {
-        const width = parseInt2(widthInput.value);
-        const height = parseInt2(heightInput.value);
         const chunkSize = parseInt2(chunkSizeInput.value);
 
-        renderer.setSize(width, height);
+        let start;
 
-        setStatus('Rendering...');
+        renderer.loadScene(sceneInput.textContent).then(size => {
+            renderer.setSize(size.width, size.height);
 
-        const start = Date.now();
+            setStatus('Rendering...');
 
-        renderer.render(chunkSize)
-            .then(_ => setStatus('Rendered in ' + ((Date.now() - start) / 1000).toFixed(2) + ' seconds'));
+            start = Date.now();
+
+            return renderer.render(chunkSize);
+        }).then(_ => setStatus('Rendered in ' + ((Date.now() - start) / 1000).toFixed(2) + ' seconds'));
     } catch (e) {
         setStatus(e);
     }

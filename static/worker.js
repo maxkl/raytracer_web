@@ -7,17 +7,20 @@ importScripts('./pkg/raytracer_web.js');
     sendMessage('loaded');
 })().catch(err => sendMessage('load error', err.toString()));
 
-const { Renderer, Rect } = wasm_bindgen;
+const { RendererWrapper } = wasm_bindgen;
 
 let renderer;
 
 function init() {
-    renderer = new Renderer();
+    renderer = new RendererWrapper();
+}
+
+function load_scene(scene) {
+    return renderer.load_scene_string(scene);
 }
 
 function render(x, y, w, h) {
-    renderer.setup(new Rect(x, y, w, h));
-    renderer.render();
+    renderer.render(x, y, w, h);
     const result = renderer.get_result();
     return result.slice();
 }
@@ -35,6 +38,13 @@ onmessage = function (evt) {
     switch (message.name) {
         case 'init':
             init();
+            break;
+        case 'load scene':
+            const size = load_scene(data.scene);
+            sendMessage('load scene done', {
+                width: size[0],
+                height: size[1],
+            });
             break;
         case 'render':
             const result = render(data.x, data.y, data.w, data.h);

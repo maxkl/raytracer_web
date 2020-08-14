@@ -35,6 +35,11 @@ body {
     text-align: right;
 }
 
+.form > .row > textarea {
+    vertical-align: top;
+    white-space: pre;
+}
+
 .form > button {
     margin-left: 158px;
 }

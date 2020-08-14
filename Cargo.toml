@@ -8,9 +8,11 @@ edition = "2018"
 crate-type = ["cdylib"]
 
 [dependencies]
+raytracer = { path = "raytracer", features = ["wasm-bindgen"] }
 wasm-bindgen = "0.2.67"
 console_error_panic_hook = "0.1.6"
 js-sys = "0.3.44"
+serde_json = "1.0.57"
 
 [dependencies.web-sys]
 version = "0.3.44"

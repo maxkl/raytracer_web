@@ -6,52 +6,52 @@ use std::panic;
 use wasm_bindgen::prelude::*;
 use js_sys::Uint8Array;
 
-#[wasm_bindgen]
-pub struct Rect {
-    x: u32,
-    y: u32,
-    w: u32,
-    h: u32,
-}
+use raytracer::{Renderer, Scene};
 
 #[wasm_bindgen]
-impl Rect {
-    #[wasm_bindgen(constructor)]
-    pub fn new(x: u32, y: u32, w: u32, h: u32) -> Rect {
-        Rect { x, y, w, h }
-    }
-}
+pub struct ImageSize(pub usize, pub usize);
 
 #[wasm_bindgen]
-pub struct Renderer {
-    rect: Rect,
+pub struct RendererWrapper {
+    renderer: Option<Renderer>,
     result: Vec<u8>,
 }
 
 #[wasm_bindgen]
-impl Renderer {
+impl RendererWrapper {
     #[wasm_bindgen(constructor)]
-    pub fn new() -> Renderer {
-        Renderer {
-            rect: Rect::new(0, 0, 0, 0),
+    pub fn new() -> RendererWrapper {
+        RendererWrapper {
+            renderer: None,
             result: Vec::new(),
         }
     }
 
-    pub fn setup(&mut self, rect: Rect) {
-        self.rect = rect;
-
-        let new_size = self.rect.w as usize * self.rect.h as usize;
-        self.result.resize(new_size * 3, 0);
+    pub fn load_scene_string(&mut self, scene_string: &str) -> ImageSize {
+        let scene: Scene = serde_json::from_str(scene_string).unwrap();
+        let (w, h) = scene.camera.resolution;
+        self.load_scene(scene);
+        ImageSize(w, h)
     }
 
-    pub fn render(&mut self) {
-        for y in 0..self.rect.h {
-            for x in 0..self.rect.w {
-                let i = ((y as usize * self.rect.w as usize) + x as usize) * 3;
-                self.result[i + 0] = ((x as f32 / (self.rect.w - 1) as f32) * 255f32) as u8;
-                self.result[i + 1] = ((y as f32 / (self.rect.h - 1) as f32) * 255f32) as u8;
-                self.result[i + 2] = 0;
+    fn load_scene(&mut self, scene: Scene) {
+        self.renderer = Some(Renderer::new(scene));
+    }
+
+    pub fn render(&mut self, x: usize, y: usize, w: usize, h: usize) {
+        let renderer = self.renderer.as_ref()
+            .expect("Renderer not initialized");
+        let result = renderer.render_rect(x, y, w, h);
+
+        self.result.resize(w * h * 3, 0);
+        let mut i = 0;
+        for local_y in 0..h {
+            for local_x in 0..w {
+                let pixel = result.get_pixel(local_x, local_y);
+                self.result[i] = pixel.0;
+                self.result[i + 1] = pixel.1;
+                self.result[i + 2] = pixel.2;
+                i += 3;
             }
         }
     }
