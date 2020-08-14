@@ -139,6 +139,8 @@ class RenderWorker extends EventEmitter {
     }
 }
 
+const ABORTED = {};
+
 class Renderer {
     constructor(canvas) {
         this._canvas = canvas;
@@ -148,6 +150,8 @@ class Renderer {
 
         this._imageData = null;
         this._pixels = null;
+
+        this._abort = false;
 
         this._initialized = false;
     }
@@ -219,6 +223,14 @@ class Renderer {
         this._ctx.putImageData(this._imageData, 0, 0);
     }
 
+    abort() {
+        this._abort = true;
+    }
+
+    cancelAbort() {
+        this._abort = false;
+    }
+
     async render(chunkSize) {
         const chunks = [];
         for (let y = 0; y < this._height; y += chunkSize) {
@@ -253,6 +265,10 @@ class Renderer {
         }
 
         function render(worker) {
+            if (self._abort) {
+                return Promise.reject(ABORTED);
+            }
+
             const chunk = getChunk();
             if (chunk == null) {
                 return Promise.resolve();
@@ -373,6 +389,7 @@ const DEFAULT_SCENE = `{
 const sceneInput = document.querySelector('#input-scene');
 const chunkSizeInput = document.querySelector('#input-chunk-size');
 const renderButton = document.querySelector('#btn-render');
+const abortButton = document.querySelector('#btn-abort');
 const errorText = document.querySelector('#error');
 const status1Text = document.querySelector('#status1');
 const status2Text = document.querySelector('#status2');
@@ -407,6 +424,10 @@ function parseInt2(s) {
     return value;
 }
 
+abortButton.addEventListener('click', _ => {
+    renderer.abort();
+});
+
 renderButton.addEventListener('click', _ => {
     let scene;
     let chunkSize;
@@ -428,6 +449,11 @@ renderButton.addEventListener('click', _ => {
 
     hideError();
 
+    renderer.cancelAbort();
+
+    renderButton.disabled = true;
+    abortButton.disabled = false;
+
     setStatus1('Using ' + renderer.getWorkerCount() + ' workers');
 
     setStatus2('Loading scene...');
@@ -444,7 +470,21 @@ renderButton.addEventListener('click', _ => {
         start = Date.now();
 
         return renderer.render(chunkSize);
-    }).then(_ => setStatus2('Rendered in ' + ((Date.now() - start) / 1000).toFixed(2) + ' seconds'));
+    }).then(_ => {
+        setStatus2('Rendered in ' + ((Date.now() - start) / 1000).toFixed(2) + ' seconds');
+
+        renderButton.disabled = false;
+        abortButton.disabled = true;
+    }).catch(e => {
+        if (e === ABORTED) {
+            setStatus2('Aborted');
+        } else {
+            setStatus2('Renderer error: ' + e);
+        }
+
+        renderButton.disabled = false;
+        abortButton.disabled = true;
+    });
 });
 
 renderer.init()

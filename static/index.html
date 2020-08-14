@@ -10,7 +10,10 @@
             <div class="row"><label for="input-scene">Scene definition:</label><textarea id="input-scene" style="width: 500px; height: 300px;" autocomplete="off"></textarea></div>
             <div class="row"><label for="input-chunk-size">Chunk size:</label><input type="number" id="input-chunk-size" value="50" autocomplete="off" /> px</div>
             <div id="error" class="col-2" style="display: none; color: red"></div>
-            <button id="btn-render" class="col-2" disabled autocomplete="off">Render</button>
+            <div class="col-2">
+                <button id="btn-render" disabled autocomplete="off">Render</button>
+                <button id="btn-abort" disabled autocomplete="off">Abort render</button>
+            </div>
         </div>
         <h2 id="render-result">Render result:</h2>
         <p>
